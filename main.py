@@ -34,6 +34,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS family_members (
             family_id INTEGER,
             user_id INTEGER,
+            role TEXT DEFAULT 'Родитель',
+            name TEXT DEFAULT 'Неизвестно',
             FOREIGN KEY (family_id) REFERENCES families (id)
         )
     """)
@@ -44,6 +46,8 @@ def init_db():
             family_id INTEGER,
             author_id INTEGER,
             timestamp TEXT NOT NULL,
+            author_role TEXT DEFAULT 'Родитель',
+            author_name TEXT DEFAULT 'Неизвестно',
             FOREIGN KEY (family_id) REFERENCES families (id)
         )
     """)
@@ -54,6 +58,8 @@ def init_db():
             family_id INTEGER,
             author_id INTEGER,
             timestamp TEXT NOT NULL,
+            author_role TEXT DEFAULT 'Родитель',
+            author_name TEXT DEFAULT 'Неизвестно',
             FOREIGN KEY (family_id) REFERENCES families (id)
         )
     """)
@@ -204,6 +210,34 @@ def get_family_name(family_id):
     conn.close()
     return result[0] if result else "Неизвестная семья"
 
+def get_member_info(user_id):
+    """Получить информацию о члене семьи"""
+    conn = sqlite3.connect("babybot.db")
+    cur = conn.cursor()
+    cur.execute("SELECT role, name FROM family_members WHERE user_id = ?", (user_id,))
+    result = cur.fetchone()
+    conn.close()
+    if result:
+        return result[0], result[1]  # role, name
+    return "Родитель", "Неизвестно"
+
+def set_member_role(user_id, role, name):
+    """Установить роль и имя для члена семьи"""
+    conn = sqlite3.connect("babybot.db")
+    cur = conn.cursor()
+    cur.execute("UPDATE family_members SET role = ?, name = ? WHERE user_id = ?", (role, name, user_id))
+    conn.commit()
+    conn.close()
+
+def get_family_members_with_roles(family_id):
+    """Получить всех членов семьи с ролями"""
+    conn = sqlite3.connect("babybot.db")
+    cur = conn.cursor()
+    cur.execute("SELECT user_id, role, name FROM family_members WHERE family_id = ?", (family_id,))
+    members = cur.fetchall()
+    conn.close()
+    return members
+
 def add_feeding(user_id, minutes_ago=0):
     conn = sqlite3.connect("babybot.db")
     cur = conn.cursor()
@@ -214,9 +248,12 @@ def add_feeding(user_id, minutes_ago=0):
         # Если пользователь не в семье, создаем временную семью
         family_id = create_family("Временная семья", user_id)
     
+    # Получаем информацию об авторе
+    role, name = get_member_info(user_id)
+    
     timestamp = datetime.now() - timedelta(minutes=minutes_ago)
-    cur.execute("INSERT INTO feedings (family_id, author_id, timestamp) VALUES (?, ?, ?)", 
-                (family_id, user_id, timestamp.isoformat()))
+    cur.execute("INSERT INTO feedings (family_id, author_id, timestamp, author_role, author_name) VALUES (?, ?, ?, ?, ?)", 
+                (family_id, user_id, timestamp.isoformat(), role, name))
     conn.commit()
     conn.close()
 
@@ -230,9 +267,12 @@ def add_diaper_change(user_id, minutes_ago=0):
         # Если пользователь не в семье, создаем временную семью
         family_id = create_family("Временная семья", user_id)
     
+    # Получаем информацию об авторе
+    role, name = get_member_info(user_id)
+    
     timestamp = datetime.now() - timedelta(minutes=minutes_ago)
-    cur.execute("INSERT INTO diapers (family_id, author_id, timestamp) VALUES (?, ?, ?)", 
-                (family_id, user_id, timestamp.isoformat()))
+    cur.execute("INSERT INTO diapers (family_id, author_id, timestamp, author_role, author_name) VALUES (?, ?, ?, ?, ?)", 
+                (family_id, user_id, timestamp.isoformat(), role, name))
     conn.commit()
     conn.close()
 
@@ -317,7 +357,7 @@ def get_feedings_by_day(user_id, date):
     
     start_date = datetime.combine(date, datetime.min.time()).isoformat()
     end_date = datetime.combine(date, datetime.max.time()).isoformat()
-    cur.execute("SELECT id, timestamp FROM feedings WHERE family_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp", 
+    cur.execute("SELECT id, timestamp, author_role, author_name FROM feedings WHERE family_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp", 
                 (family_id, start_date, end_date))
     result = cur.fetchall()
     conn.close()
@@ -334,7 +374,7 @@ def get_diapers_by_day(user_id, date):
     
     start_date = datetime.combine(date, datetime.min.time()).isoformat()
     end_date = datetime.combine(date, datetime.max.time()).isoformat()
-    cur.execute("SELECT id, timestamp FROM diapers WHERE family_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp", 
+    cur.execute("SELECT id, timestamp, author_role, author_name FROM diapers WHERE family_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp", 
                 (family_id, start_date, end_date))
     result = cur.fetchall()
     conn.close()
@@ -380,13 +420,15 @@ family_creation_pending = {}
 manual_feeding_pending = {}
 join_pending = {}
 edit_pending = {}
+edit_role_pending = {}
 
 @client.on(events.NewMessage(pattern='/start'))
 async def start(event):
     buttons = [
         [Button.text("🍽 Кормление"), Button.text("🧷 Смена подгузника")],
         [Button.text("🍼 Статус кормления"), Button.text("📜 История")],
-        [Button.text("💡 Совет"), Button.text("⚙ Настройки")]
+        [Button.text("👤 Моя роль"), Button.text("💡 Совет")],
+        [Button.text("⚙ Настройки")]
     ]
     await event.respond("👶 Привет! Я помогу следить за малышом:", buttons=buttons)
 
@@ -422,6 +464,32 @@ async def last_feed(event):
 async def tip_command(event):
     tip = get_random_tip()
     await event.respond(tip)
+
+@client.on(events.NewMessage(pattern='👤 Моя роль'))
+async def my_role_command(event):
+    """Показать и изменить роль пользователя"""
+    uid = event.sender_id
+    fid = get_family_id(uid)
+    
+    if not fid:
+        await event.respond("❌ Сначала создайте семью.")
+        return
+    
+    role, name = get_member_info(uid)
+    
+    message = (
+        f"👤 **Ваша роль в семье:**\n\n"
+        f"🎭 Роль: {role}\n"
+        f"📝 Имя: {name}\n\n"
+        f"💡 Нажмите кнопку ниже, чтобы изменить"
+    )
+    
+    buttons = [
+        [Button.inline("✏️ Изменить роль", b"edit_role")],
+        [Button.inline("🔙 Назад", b"back_to_main")]
+    ]
+    
+    await event.respond(message, buttons=buttons)
 
 
 
@@ -483,8 +551,8 @@ async def family_members_cmd(event):
         
         if members:
             text = "👥 **Члены семьи:**\n\n"
-            for i, (user_id,) in enumerate(members, 1):
-                text += f"{i}. Пользователь ID: {user_id}\n"
+            for i, (user_id, role, name) in enumerate(members, 1):
+                text += f"{i}. {role} {name} (ID: {user_id})\n"
         else:
             text = "👥 В семье пока нет членов."
         
@@ -651,6 +719,38 @@ async def callback_handler(event):
         toggle_tips(fid)
         await settings_menu(event)
     
+    elif data == "edit_role":
+        await event.edit("👤 Выберите вашу роль:")
+        buttons = [
+            [Button.inline("👨‍👩‍👧 Родитель", b"role_parent")],
+            [Button.inline("👨‍👩‍👧 Мама", b"role_mom")],
+            [Button.inline("👨‍👩‍👧 Папа", b"role_dad")],
+            [Button.inline("👨‍👩‍👧 Бабушка", b"role_grandma")],
+            [Button.inline("👨‍👩‍👧 Дедушка", b"role_grandpa")],
+            [Button.inline("👨‍👩‍👧 Няня", b"role_nanny")],
+            [Button.inline("🔙 Назад", b"back_to_main")]
+        ]
+        await event.edit("👤 Выберите вашу роль:", buttons=buttons)
+    
+    elif data.startswith("role_"):
+        role_map = {
+            "role_parent": "Родитель",
+            "role_mom": "Мама",
+            "role_dad": "Папа",
+            "role_grandma": "Бабушка",
+            "role_grandpa": "Дедушка",
+            "role_nanny": "Няня"
+        }
+        role = role_map.get(data, "Родитель")
+        uid = event.sender_id
+        
+        # Запрашиваем имя
+        await event.edit(f"👤 Роль установлена: {role}\n\n📝 Теперь введите ваше имя:")
+        edit_role_pending[uid] = {"role": role, "step": "waiting_name"}
+    
+    elif data == "back_to_main":
+        await start(event)
+    
     elif data == "set_tips_time":
         await event.edit("🕐 Выберите время для рассылки советов:")
         # Показываем кнопки для выбора часа
@@ -692,7 +792,12 @@ async def callback_handler(event):
             text += "🍼 Кормления:\n"
             for f in feedings:
                 time_str = datetime.fromisoformat(f[1]).strftime("%H:%M")
-                text += f"  • {time_str}  [ID {f[0]}]\n"
+                # Проверяем, есть ли информация об авторе
+                if len(f) >= 4 and f[3] and f[4]:  # author_role и author_name
+                    author_info = f"{f[3]} {f[4]}"
+                else:
+                    author_info = "Неизвестно"
+                text += f"  • {time_str} - {author_info} [ID {f[0]}]\n"
         else:
             text += "🍼 Кормлений нет\n"
 
@@ -700,7 +805,12 @@ async def callback_handler(event):
             text += "\n🧷 Подгузники:\n"
             for d in diapers:
                 time_str = datetime.fromisoformat(d[1]).strftime("%H:%M")
-                text += f"  • {time_str}  [ID {d[0]}]\n"
+                # Проверяем, есть ли информация об авторе
+                if len(d) >= 4 and d[3] and d[4]:  # author_role и author_name
+                    author_info = f"{d[3]} {d[4]}"
+                else:
+                    author_info = "Неизвестно"
+                text += f"  • {time_str} - {author_info} [ID {d[0]}]\n"
         else:
             text += "\n🧷 Смен нет\n"
 
@@ -856,6 +966,23 @@ async def handle_text(event):
         del family_creation_pending[uid]
         code = invite_code_for(fid)
         await event.respond(f"✅ Семья создана. Код приглашения: `{code}`")
+        return
+    
+    if uid in edit_role_pending:
+        user_input = event.raw_text.strip()
+        role_data = edit_role_pending[uid]
+        
+        if role_data["step"] == "waiting_name":
+            # Устанавливаем роль и имя
+            set_member_role(uid, role_data["role"], user_input)
+            del edit_role_pending[uid]
+            
+            await event.respond(
+                f"✅ Роль обновлена!\n\n"
+                f"🎭 Роль: {role_data['role']}\n"
+                f"📝 Имя: {user_input}\n\n"
+                f"💡 Теперь в истории будет отображаться, кто именно ухаживает за малышом!"
+            )
         return
 
 
