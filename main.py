@@ -121,6 +121,8 @@ def init_db():
                     family_id INTEGER,
                     author_id INTEGER,
                     timestamp TEXT NOT NULL,
+                    author_role TEXT DEFAULT 'Родитель',
+                    author_name TEXT DEFAULT 'Неизвестно',
                     FOREIGN KEY (family_id) REFERENCES families (id)
                 )
             """)
@@ -132,8 +134,8 @@ def init_db():
             for row in old_data:
                 # Для каждой записи создаем временную семью
                 temp_family_id = create_family(f"Миграция {row[0]}", row[1])
-                cur.execute("INSERT INTO feedings_new (family_id, author_id, timestamp) VALUES (?, ?, ?)",
-                           (temp_family_id, row[1], row[2]))
+                cur.execute("INSERT INTO feedings_new (family_id, author_id, timestamp, author_role, author_name) VALUES (?, ?, ?, ?, ?)",
+                           (temp_family_id, row[1], row[2], 'Родитель', 'Неизвестно'))
             
             # Удаляем старую таблицу и переименовываем новую
             cur.execute("DROP TABLE feedings")
@@ -159,6 +161,8 @@ def init_db():
                     family_id INTEGER,
                     author_id INTEGER,
                     timestamp TEXT NOT NULL,
+                    author_role TEXT DEFAULT 'Родитель',
+                    author_name TEXT DEFAULT 'Неизвестно',
                     FOREIGN KEY (family_id) REFERENCES families (id)
                 )
             """)
@@ -170,8 +174,8 @@ def init_db():
             for row in old_data:
                 # Для каждой записи создаем временную семью
                 temp_family_id = create_family(f"Миграция {row[0]}", row[1])
-                cur.execute("INSERT INTO diapers_new (family_id, author_id, timestamp) VALUES (?, ?, ?)",
-                           (temp_family_id, row[1], row[2]))
+                cur.execute("INSERT INTO diapers_new (family_id, author_id, timestamp, author_role, author_name) VALUES (?, ?, ?, ?, ?)",
+                           (temp_family_id, row[1], row[2], 'Родитель', 'Неизвестно'))
             
             # Удаляем старую таблицу и переименовываем новую
             cur.execute("DROP TABLE diapers")
@@ -873,7 +877,12 @@ async def callback_handler(event):
             buttons.append([Button.inline(f"🧷 {d[0]} ✏️", f"edit_diaper_{d[0]}".encode()),
                             Button.inline("🗑", f"del_diaper_{d[0]}".encode())])
 
-        await event.edit(text, buttons=buttons)
+        # Проверяем, есть ли кнопки
+        if buttons:
+            await event.edit(text, buttons=buttons)
+        else:
+            # Если кнопок нет, просто обновляем текст
+            await event.edit(text)
         return
 
     elif data.startswith("del_feed_"):
