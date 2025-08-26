@@ -567,6 +567,7 @@ async def family_members_cmd(event):
 
 @client.on(events.NewMessage(pattern='📜 История'))
 async def history_menu(event):
+    print(f"DEBUG: Обработка команды '📜 История' для пользователя {event.sender_id}")
     today = datetime.now().date()
     buttons = [
         [Button.inline(f"📅 {today - timedelta(days=i)}", f"hist_{i}".encode())] for i in range(3)
@@ -799,10 +800,16 @@ async def callback_handler(event):
         await settings_menu(event)
     
     elif data.startswith("hist_"):
+        print(f"DEBUG: Обработка истории для пользователя {event.sender_id}, data: {data}")
         index = int(data.split("_")[1])
         target_date = datetime.now().date() - timedelta(days=index)
+        print(f"DEBUG: Целевая дата: {target_date}")
+        
         feedings = get_feedings_by_day(event.sender_id, target_date)
         diapers = get_diapers_by_day(event.sender_id, target_date)
+        
+        print(f"DEBUG: Найдено кормлений: {len(feedings) if feedings else 0}")
+        print(f"DEBUG: Найдено смен подгузников: {len(diapers) if diapers else 0}")
 
         text = f"📅 История за {target_date}:\n\n"
 
@@ -958,9 +965,14 @@ async def handle_text(event):
                 await event.respond("❌ Время слишком далеко в прошлом. Максимум 24 часа назад.")
                 return
             
-            print(f"DEBUG: Добавляем {action_name}, minutes_ago: {diff}")
-            add_func(uid, minutes_ago=diff)
-            await event.respond(f"✅ {action_name.capitalize()} в {user_input} зафиксировано.")
+            # Если время в прошлом, но не слишком далеко
+            if diff >= 0:
+                print(f"DEBUG: Добавляем {action_name}, minutes_ago: {diff}")
+                add_func(uid, minutes_ago=diff)
+                await event.respond(f"✅ {action_name.capitalize()} в {user_input} зафиксировано.")
+            else:
+                await event.respond("❌ Ошибка: неожиданное значение времени.")
+            
             # Удаляем данные только после успешного добавления
             if uid in manual_feeding_pending:
                 del manual_feeding_pending[uid]
