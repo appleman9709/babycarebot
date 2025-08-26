@@ -181,7 +181,9 @@ def get_family_id(user_id):
     cur.execute("SELECT family_id FROM family_members WHERE user_id = ?", (user_id,))
     result = cur.fetchone()
     conn.close()
-    return result[0] if result else None
+    family_id = result[0] if result else None
+    print(f"DEBUG: get_family_id({user_id}) = {family_id}")
+    return family_id
 
 def create_family(name, user_id):
     conn = sqlite3.connect("babybot.db")
@@ -801,15 +803,25 @@ async def callback_handler(event):
     
     elif data.startswith("hist_"):
         print(f"DEBUG: Обработка истории для пользователя {event.sender_id}, data: {data}")
-        index = int(data.split("_")[1])
-        target_date = datetime.now().date() - timedelta(days=index)
-        print(f"DEBUG: Целевая дата: {target_date}")
-        
-        feedings = get_feedings_by_day(event.sender_id, target_date)
-        diapers = get_diapers_by_day(event.sender_id, target_date)
-        
-        print(f"DEBUG: Найдено кормлений: {len(feedings) if feedings else 0}")
-        print(f"DEBUG: Найдено смен подгузников: {len(diapers) if diapers else 0}")
+        try:
+            index = int(data.split("_")[1])
+            target_date = datetime.now().date() - timedelta(days=index)
+            print(f"DEBUG: Целевая дата: {target_date}")
+            
+            feedings = get_feedings_by_day(event.sender_id, target_date)
+            diapers = get_diapers_by_day(event.sender_id, target_date)
+            
+            print(f"DEBUG: Найдено кормлений: {len(feedings) if feedings else 0}")
+            print(f"DEBUG: Найдено смен подгузников: {len(diapers) if diapers else 0}")
+            
+            if feedings:
+                print(f"DEBUG: Первое кормление: {feedings[0]}")
+            if diapers:
+                print(f"DEBUG: Первая смена: {diapers[0]}")
+        except Exception as e:
+            print(f"DEBUG: Ошибка при обработке истории: {e}")
+            await event.answer(f"❌ Ошибка: {str(e)}", alert=True)
+            return
 
         text = f"📅 История за {target_date}:\n\n"
 
@@ -962,8 +974,28 @@ async def handle_text(event):
                     return
             elif diff > 1440:  # больше 24 часов
                 print(f"DEBUG: Время слишком далеко в прошлом, разница: {diff}")
-                await event.respond("❌ Время слишком далеко в прошлом. Максимум 24 часа назад.")
-                return
+                # Проверяем, может ли это быть время за вчера
+                yesterday = today - timedelta(days=1)
+                yesterday_dt = datetime.combine(yesterday, t.time())
+                yesterday_diff = int((now - yesterday_dt).total_seconds() // 60)
+                
+                if yesterday_diff >= 0 and yesterday_diff <= 1440:
+                    print(f"DEBUG: Время подходит для вчерашнего дня, разница: {yesterday_diff}")
+                    # Автоматически предлагаем записать за вчера
+                    buttons = [
+                        [Button.inline("✅ Да, за вчера", f"{callback_prefix}{yesterday_diff}".encode())],
+                        [Button.inline("❌ Нет, отменить", cancel_callback.encode())]
+                    ]
+                    await event.respond(
+                        f"🕒 Время {user_input} слишком далеко в прошлом для сегодняшнего дня.\n"
+                        f"Хотите сделать запись {action_name} за вчера ({yesterday.strftime('%d.%m')})?",
+                        buttons=buttons)
+                    manual_feeding_pending[uid] = {"type": action_type, "time": user_input, "minutes_ago": yesterday_diff}
+                    print(f"DEBUG: Сохранили данные в manual_feeding_pending[{uid}] = {manual_feeding_pending[uid]}")
+                    return
+                else:
+                    await event.respond("❌ Время слишком далеко в прошлом. Максимум 24 часа назад.")
+                    return
             
             # Если время в прошлом, но не слишком далеко
             if diff >= 0:
