@@ -5,6 +5,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 import sqlite3
 import random
+import threading
+import time
+import http.server
+import socketserver
 
 # Конфигурация (замените на ваши данные)
 API_ID = 25723882  # Замените на ваш API_ID
@@ -977,7 +981,49 @@ async def send_scheduled_feeding_reminders():
     except Exception as e:
         print(f"❌ Ошибка в send_scheduled_feeding_reminders: {e}")
 
+class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            response = f"""
+            <html>
+            <head><title>BabyCareBot Health Check</title></head>
+            <body>
+                <h1>🍼 BabyCareBot</h1>
+                <p>Status: ✅ Running</p>
+                <p>Time: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p>Bot is working in background</p>
+            </body>
+            </html>
+            """
+            self.wfile.write(response.encode())
+        elif self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = '{"status": "healthy", "service": "babycare-bot"}'
+            self.wfile.write(response.encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def start_health_server(port=8000):
+    """Запуск HTTP сервера для health checks"""
+    try:
+        with socketserver.TCPServer(("", port), HealthCheckHandler) as httpd:
+            print(f"🌐 Health check server started on port {port}")
+            httpd.serve_forever()
+    except Exception as e:
+        print(f"❌ Health check server error: {e}")
+
 async def start_bot():
+    # Запускаем health сервер в отдельном потоке
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
+    print("🌐 Health check server started")
+    
     scheduler.start()
     print("✅ Бот запущен!")
     await client.run_until_disconnected()
