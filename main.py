@@ -16,17 +16,17 @@ API_ID = 25723882  # Замените на ваш API_ID
 API_HASH = '151124efbbbe8c1b47db84955e4f1ae5'  # Замените на ваш API_HASH
 BOT_TOKEN = '8481307424:AAGMWkpi1QhZAwNrieAGXH4a5yQ6wl8SbZg'  # Замените на ваш токен
 
-# Функция для получения московского времени
-def get_moscow_time():
-    """Получить текущее время в московском часовом поясе"""
-    moscow_tz = pytz.timezone('Europe/Moscow')
+# Функция для получения тайского времени
+def get_thai_time():
+    """Получить текущее время в тайском часовом поясе"""
+    thai_tz = pytz.timezone('Asia/Bangkok')
     utc_now = datetime.now(pytz.UTC)
-    moscow_now = utc_now.astimezone(moscow_tz)
-    return moscow_now
+    thai_now = utc_now.astimezone(thai_tz)
+    return thai_now
 
-def get_moscow_date():
-    """Получить текущую дату в московском часовом поясе"""
-    return get_moscow_time().date()
+def get_thai_date():
+    """Получить текущую дату в тайском часовом поясе"""
+    return get_thai_time().date()
 
 client = TelegramClient('babybot', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
@@ -266,7 +266,7 @@ def add_feeding(user_id, minutes_ago=0):
     # Получаем информацию об авторе
     role, name = get_member_info(user_id)
     
-    timestamp = get_moscow_time() - timedelta(minutes=minutes_ago)
+    timestamp = get_thai_time() - timedelta(minutes=minutes_ago)
     cur.execute("INSERT INTO feedings (family_id, author_id, timestamp, author_role, author_name) VALUES (?, ?, ?, ?, ?)", 
                 (family_id, user_id, timestamp.isoformat(), role, name))
     conn.commit()
@@ -285,7 +285,7 @@ def add_diaper_change(user_id, minutes_ago=0):
     # Получаем информацию об авторе
     role, name = get_member_info(user_id)
     
-    timestamp = get_moscow_time() - timedelta(minutes=minutes_ago)
+    timestamp = get_thai_time() - timedelta(minutes=minutes_ago)
     cur.execute("INSERT INTO diapers (family_id, author_id, timestamp, author_role, author_name) VALUES (?, ?, ?, ?, ?)", 
                 (family_id, user_id, timestamp.isoformat(), role, name))
     conn.commit()
@@ -583,7 +583,7 @@ async def family_members_cmd(event):
 @client.on(events.NewMessage(pattern='📜 История'))
 async def history_menu(event):
     print(f"DEBUG: Обработка команды '📜 История' для пользователя {event.sender_id}")
-    today = get_moscow_date()
+    today = get_thai_date()
     buttons = [
         [Button.inline(f"📅 {today - timedelta(days=i)}", f"hist_{i}".encode())] for i in range(3)
     ]
@@ -610,7 +610,7 @@ async def feeding_status(event):
     last_feeding = get_last_feeding_time_for_family(fid)
     
     if last_feeding:
-        time_since_last = get_moscow_time() - last_feeding
+        time_since_last = get_thai_time() - last_feeding
         hours_since_last = time_since_last.total_seconds() / 3600
         minutes_since_last = time_since_last.total_seconds() / 60
         
@@ -818,7 +818,7 @@ async def callback_handler(event):
         print(f"DEBUG: Обработка истории для пользователя {event.sender_id}, data: {data}")
         try:
             index = int(data.split("_")[1])
-            target_date = get_moscow_date() - timedelta(days=index)
+            target_date = get_thai_date() - timedelta(days=index)
             print(f"DEBUG: Целевая дата: {target_date}")
             
             feedings = get_feedings_by_day(event.sender_id, target_date)
@@ -947,14 +947,16 @@ async def handle_text(event):
             t = datetime.strptime(user_input, "%H:%M")
             print(f"DEBUG: Парсинг времени успешен: {t}")
             
-            # Создаем datetime объект для сегодняшнего дня с введенным временем (в московском времени)
-            today = get_moscow_date()
-            dt = datetime.combine(today, t.time())
-            now = get_moscow_time()
+            # Создаем datetime объект для сегодняшнего дня с введенным временем (в тайском времени)
+            today = get_thai_date()
+            # Создаем datetime объект с тайским часовым поясом
+            thai_tz = pytz.timezone('Asia/Bangkok')
+            dt = thai_tz.localize(datetime.combine(today, t.time()))
+            now = get_thai_time()
             
-            print(f"DEBUG: Сегодня (Москва): {today}")
+            print(f"DEBUG: Сегодня (Таиланд): {today}")
             print(f"DEBUG: Введенное время: {dt}")
-            print(f"DEBUG: Текущее время (Москва): {now}")
+            print(f"DEBUG: Текущее время (Таиланд): {now}")
             print(f"DEBUG: UTC время: {datetime.now(pytz.UTC)}")
             
             # Вычисляем разницу в минутах
@@ -966,7 +968,7 @@ async def handle_text(event):
                 print(f"DEBUG: Время в будущем, разница: {diff}")
                 # Предлагаем сделать запись за прошлый день
                 yesterday = today - timedelta(days=1)
-                yesterday_dt = datetime.combine(yesterday, t.time())
+                yesterday_dt = thai_tz.localize(datetime.combine(yesterday, t.time()))
                 yesterday_diff = int((now - yesterday_dt).total_seconds() // 60)
                 
                 if yesterday_diff >= 0 and yesterday_diff <= 1440:
@@ -990,7 +992,7 @@ async def handle_text(event):
                 print(f"DEBUG: Время слишком далеко в прошлом, разница: {diff}")
                 # Проверяем, может ли это быть время за вчера
                 yesterday = today - timedelta(days=1)
-                yesterday_dt = datetime.combine(yesterday, t.time())
+                yesterday_dt = thai_tz.localize(datetime.combine(yesterday, t.time()))
                 yesterday_diff = int((now - yesterday_dt).total_seconds() // 60)
                 
                 if yesterday_diff >= 0 and yesterday_diff <= 1440:
