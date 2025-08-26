@@ -427,8 +427,7 @@ async def start(event):
     buttons = [
         [Button.text("🍽 Кормление"), Button.text("🧷 Смена подгузника")],
         [Button.text("🍼 Статус кормления"), Button.text("📜 История")],
-        [Button.text("👤 Моя роль"), Button.text("💡 Совет")],
-        [Button.text("⚙ Настройки")]
+        [Button.text("💡 Совет"), Button.text("⚙ Настройки")]
     ]
     await event.respond("👶 Привет! Я помогу следить за малышом:", buttons=buttons)
 
@@ -514,6 +513,7 @@ async def settings_menu(event):
         [Button.inline(f"🧷 Интервал подгузника: {diaper_i}ч", b"set_diaper")],
         [Button.inline(tips_label, b"toggle_tips")],
         [Button.inline(f"🕐 Время советов: {tips_hour:02d}:{tips_minute:02d}", b"set_tips_time")],
+        [Button.inline("👤 Моя роль", b"my_role")],
         [Button.inline("👨‍👩‍👧 Управление семьей", b"family_management")]
     ]
     await event.respond("⚙ Настройки:", buttons=buttons)
@@ -719,6 +719,24 @@ async def callback_handler(event):
         toggle_tips(fid)
         await settings_menu(event)
     
+    elif data == "my_role":
+        uid = event.sender_id
+        role, name = get_member_info(uid)
+        
+        message = (
+            f"👤 **Ваша роль в семье:**\n\n"
+            f"🎭 Роль: {role}\n"
+            f"📝 Имя: {name}\n\n"
+            f"💡 Нажмите кнопку ниже, чтобы изменить"
+        )
+        
+        buttons = [
+            [Button.inline("✏️ Изменить роль", b"edit_role")],
+            [Button.inline("🔙 Назад к настройкам", b"back_to_settings")]
+        ]
+        
+        await event.edit(message, buttons=buttons)
+    
     elif data == "edit_role":
         await event.edit("👤 Выберите вашу роль:")
         buttons = [
@@ -728,9 +746,9 @@ async def callback_handler(event):
             [Button.inline("👨‍👩‍👧 Бабушка", b"role_grandma")],
             [Button.inline("👨‍👩‍👧 Дедушка", b"role_grandpa")],
             [Button.inline("👨‍👩‍👧 Няня", b"role_nanny")],
-            [Button.inline("🔙 Назад", b"back_to_main")]
+            [Button.inline("🔙 Назад к настройкам", b"back_to_settings")]
         ]
-        await event.edit("👤 Выберите вашу роль:", buttons=buttons)
+        await event.edit("👤 Выберите вашу роль:", buttons=buttons )
     
     elif data.startswith("role_"):
         role_map = {
