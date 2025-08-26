@@ -1,0 +1,50 @@
+# Виртуальное окружение
+venv/
+env/
+.env
+
+# Python кэш
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# База данных (будет создана в контейнере)
+*.db
+*.sqlite
+*.sqlite3
+
+# Логи
+*.log
+
+# Временные файлы
+*.tmp
+*.temp
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Документация
+README.md
+*.md
+
+# Тесты
+test_*.py
+*_test.py

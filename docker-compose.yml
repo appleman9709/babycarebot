@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  babycare-bot:
+    build: .
+    container_name: babycare-bot
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Монтируем директорию data для сохранения базы данных
+      - ./data:/app/data
+      # Монтируем директорию с советами
+      - ./data/advice.csv:/app/data/advice.csv:ro
+    # Для Telegram бота не нужны порты, но оставляем для совместимости
+    ports:
+      - "8000:8000"
+    # Переменные окружения (заполните своими данными)
+    env_file:
+      - .env
