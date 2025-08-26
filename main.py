@@ -41,16 +41,20 @@ def init_db():
     cur.execute("""
         CREATE TABLE IF NOT EXISTS feedings (
             id INTEGER PRIMARY KEY,
-            user_id INTEGER,
-            timestamp TEXT NOT NULL
+            family_id INTEGER,
+            author_id INTEGER,
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY (family_id) REFERENCES families (id)
         )
     """)
     
     cur.execute("""
         CREATE TABLE IF NOT EXISTS diapers (
             id INTEGER PRIMARY KEY,
-            user_id INTEGER,
-            timestamp TEXT NOT NULL
+            family_id INTEGER,
+            author_id INTEGER,
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY (family_id) REFERENCES families (id)
         )
     """)
     
@@ -82,6 +86,83 @@ def init_db():
     # Обновляем существующие записи, устанавливая значения по умолчанию
     cur.execute("UPDATE settings SET tips_time_hour = 9 WHERE tips_time_hour IS NULL")
     cur.execute("UPDATE settings SET tips_time_minute = 0 WHERE tips_time_minute IS NULL")
+    
+    # Миграция таблиц feedings и diapers
+    try:
+        # Проверяем, есть ли колонка family_id в таблице feedings
+        cur.execute("PRAGMA table_info(feedings)")
+        columns = [col[1] for col in cur.fetchall()]
+        
+        if 'family_id' not in columns:
+            print("🔄 Мигрируем таблицу feedings...")
+            # Создаем временную таблицу с новой структурой
+            cur.execute("""
+                CREATE TABLE feedings_new (
+                    id INTEGER PRIMARY KEY,
+                    family_id INTEGER,
+                    author_id INTEGER,
+                    timestamp TEXT NOT NULL,
+                    FOREIGN KEY (family_id) REFERENCES families (id)
+                )
+            """)
+            
+            # Копируем данные из старой таблицы
+            cur.execute("SELECT id, user_id, timestamp FROM feedings")
+            old_data = cur.fetchall()
+            
+            for row in old_data:
+                # Для каждой записи создаем временную семью
+                temp_family_id = create_family(f"Миграция {row[0]}", row[1])
+                cur.execute("INSERT INTO feedings_new (family_id, author_id, timestamp) VALUES (?, ?, ?)",
+                           (temp_family_id, row[1], row[2]))
+            
+            # Удаляем старую таблицу и переименовываем новую
+            cur.execute("DROP TABLE feedings")
+            cur.execute("ALTER TABLE feedings_new RENAME TO feedings")
+            print("✅ Таблица feedings мигрирована")
+        else:
+            print("ℹ️ Таблица feedings уже имеет правильную структуру")
+            
+    except sqlite3.OperationalError as e:
+        print(f"ℹ️ Миграция feedings: {e}")
+    
+    try:
+        # Проверяем, есть ли колонка family_id в таблице diapers
+        cur.execute("PRAGMA table_info(diapers)")
+        columns = [col[1] for col in cur.fetchall()]
+        
+        if 'family_id' not in columns:
+            print("🔄 Мигрируем таблицу diapers...")
+            # Создаем временную таблицу с новой структурой
+            cur.execute("""
+                CREATE TABLE diapers_new (
+                    id INTEGER PRIMARY KEY,
+                    family_id INTEGER,
+                    author_id INTEGER,
+                    timestamp TEXT NOT NULL,
+                    FOREIGN KEY (family_id) REFERENCES families (id)
+                )
+            """)
+            
+            # Копируем данные из старой таблицы
+            cur.execute("SELECT id, user_id, timestamp FROM diapers")
+            old_data = cur.fetchall()
+            
+            for row in old_data:
+                # Для каждой записи создаем временную семью
+                temp_family_id = create_family(f"Миграция {row[0]}", row[1])
+                cur.execute("INSERT INTO diapers_new (family_id, author_id, timestamp) VALUES (?, ?, ?)",
+                           (temp_family_id, row[1], row[2]))
+            
+            # Удаляем старую таблицу и переименовываем новую
+            cur.execute("DROP TABLE diapers")
+            cur.execute("ALTER TABLE diapers_new RENAME TO diapers")
+            print("✅ Таблица diapers мигрирована")
+        else:
+            print("ℹ️ Таблица diapers уже имеет правильную структуру")
+            
+    except sqlite3.OperationalError as e:
+        print(f"ℹ️ Миграция diapers: {e}")
     
     conn.commit()
     conn.close()
