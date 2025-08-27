@@ -642,11 +642,12 @@ async def my_role_command(event):
 async def settings_menu(event):
     fid = get_family_id(event.sender_id)
     if not fid:
-        # Если пользователь не в семье, показываем кнопку создания семьи
+        # Если пользователь не в семье, показываем опции для работы с семьей
         buttons = [
-            [Button.inline("👨‍👩‍👧 Создать семью", b"create_family")]
+            [Button.inline("👨‍👩‍👧 Создать семью", b"create_family")],
+            [Button.inline("👨‍👩‍👧 Управление семьей", b"family_management")]
         ]
-        await event.respond("⚙ Настройки:\n\n❗ Сначала создайте семью:", buttons=buttons)
+        await event.respond("⚙ Настройки:\n\n❗ Сначала создайте семью или присоединитесь к существующей:", buttons=buttons)
         return
     
     feed_i, diaper_i = get_user_intervals(fid)
@@ -669,7 +670,11 @@ async def create_family_cmd(event):
     family_creation_pending[event.sender_id] = True
 
 async def family_management_cmd(event):
-    fid = get_family_id(event.sender_id)
+    uid = event.sender_id
+    fid = get_family_id(uid)
+    
+    print(f"DEBUG: family_management_cmd для пользователя {uid}, family_id: {fid}")
+    
     if fid:
         code = invite_code_for(fid)
         buttons = [
@@ -685,6 +690,7 @@ async def family_management_cmd(event):
         )
     else:
         # Пользователь не в семье - показываем опции
+        print(f"DEBUG: Пользователь {uid} не в семье, показываем опции присоединения")
         buttons = [
             [Button.inline("👨‍👩‍👧 Создать семью", b"create_family")],
             [Button.inline("🔗 Присоединиться к семье", b"join_family")],
