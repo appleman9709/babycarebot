@@ -1480,16 +1480,45 @@ def start_health_server(port=8000):
         print(f"❌ Health check server error: {e}")
 
 async def start_bot():
-    # Запускаем health сервер в отдельном потоке
-    health_thread = threading.Thread(target=start_health_server, daemon=True)
-    health_thread.start()
-    print("🌐 Health check server started")
+    """Запуск бота"""
+    print("🔍 Проверяем подключение к Telegram...")
     
-    scheduler.start()
-    print("✅ Бот запущен!")
-    await client.run_until_disconnected()
+    try:
+        # Проверяем, что бот подключился
+        me = await client.get_me()
+        print(f"✅ Бот подключен: @{me.username}")
+        print(f"🆔 ID бота: {me.id}")
+        print(f"📝 Имя бота: {me.first_name}")
+        
+        # Запускаем health сервер в отдельном потоке
+        health_thread = threading.Thread(target=start_health_server, daemon=True)
+        health_thread.start()
+        print("🌐 Health check server started")
+        
+        scheduler.start()
+        print("✅ Бот запущен!")
+        
+        # Запускаем бота
+        await client.run_until_disconnected()
+    except Exception as e:
+        print(f"❌ Ошибка при запуске бота: {e}")
+        print("🔍 Проверьте переменные окружения и токен бота")
+        raise e
 
 # Запуск бота
 if __name__ == "__main__":
-    with client:
-        client.loop.run_until_complete(start_bot())
+    try:
+        print("🚀 Запуск BabyCareBot...")
+        print(f"🔑 API_ID: {API_ID}")
+        print(f"🔑 API_HASH: {API_HASH[:10]}...")  # Показываем только первые 10 символов
+        print(f"🔑 BOT_TOKEN: {BOT_TOKEN[:10]}...")  # Показываем только первые 10 символов
+        
+        with client:
+            client.loop.run_until_complete(start_bot())
+    except KeyboardInterrupt:
+        print("\n🛑 Бот остановлен пользователем")
+    except Exception as e:
+        print(f"❌ Критическая ошибка: {e}")
+        print("🔍 Проверьте логи для диагностики")
+        import traceback
+        traceback.print_exc()
