@@ -494,6 +494,32 @@ def get_random_tip():
 init_db()
 scheduler = AsyncIOScheduler()
 
+# Добавляем задачу для поддержания активности (каждые 5 минут)
+def keep_alive_ping():
+    """Функция для поддержания активности бота"""
+    try:
+        import urllib.request
+        import urllib.error
+        
+        # Пингуем собственный health check сервер
+        try:
+            response = urllib.request.urlopen('http://localhost:8000/ping', timeout=5)
+            if response.getcode() == 200:
+                print(f"✅ Keep-alive ping successful: {time.strftime('%H:%M:%S')}")
+            else:
+                print(f"⚠️ Keep-alive ping returned status: {response.getcode()}")
+        except urllib.error.URLError as e:
+            print(f"⚠️ Keep-alive ping failed: {e}")
+        except Exception as e:
+            print(f"⚠️ Keep-alive ping error: {e}")
+            
+    except Exception as e:
+        print(f"❌ Keep-alive ping critical error: {e}")
+
+# Добавляем задачу в планировщик (каждые 5 минут)
+scheduler.add_job(keep_alive_ping, 'interval', minutes=5, id='keep_alive_ping')
+print("⏰ Keep-alive ping scheduled every 5 minutes")
+
 # Состояния ожидания
 family_creation_pending = {}
 manual_feeding_pending = {}
@@ -1444,6 +1470,8 @@ async def send_scheduled_feeding_reminders():
 
 class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        current_time = time.strftime('%Y-%m-%d %H:%M:%S')
+        
         if self.path == '/':
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
@@ -1454,8 +1482,10 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
             <body>
                 <h1>🍼 BabyCareBot</h1>
                 <p>Status: ✅ Running</p>
-                <p>Time: {time.strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p>Time: {current_time}</p>
                 <p>Bot is working in background</p>
+                <p>Last Activity: {current_time}</p>
+                <p>Uptime: Active</p>
             </body>
             </html>
             """
@@ -1464,7 +1494,20 @@ class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            response = '{"status": "healthy", "service": "babycare-bot"}'
+            response = f'{{"status": "healthy", "service": "babycare-bot", "timestamp": "{current_time}", "uptime": "active"}}'
+            self.wfile.write(response.encode())
+        elif self.path == '/ping':
+            # Простой ping для постоянной активности
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(f"pong {current_time}".encode())
+        elif self.path == '/status':
+            # Расширенный статус
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = f'{{"status": "healthy", "bot": "running", "timestamp": "{current_time}", "health": "ok"}}'
             self.wfile.write(response.encode())
         else:
             self.send_response(404)
@@ -1475,6 +1518,11 @@ def start_health_server(port=8000):
     try:
         with socketserver.TCPServer(("", port), HealthCheckHandler) as httpd:
             print(f"🌐 Health check server started on port {port}")
+            print(f"🔗 Health check URLs:")
+            print(f"   • Main: http://localhost:{port}/")
+            print(f"   • Health: http://localhost:{port}/health")
+            print(f"   • Ping: http://localhost:{port}/ping")
+            print(f"   • Status: http://localhost:{port}/status")
             httpd.serve_forever()
     except Exception as e:
         print(f"❌ Health check server error: {e}")

@@ -14,5 +14,18 @@ services:
         sync: false
       - key: BOT_TOKEN
         sync: false
-    healthCheckPath: /
+    healthCheckPath: /health
+    healthCheckTimeout: 10
     autoDeploy: true
+    # Дополнительные настройки для предотвращения "сна"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: KEEP_ALIVE_INTERVAL
+        value: "5"
