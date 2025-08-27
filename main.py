@@ -242,6 +242,40 @@ def create_family(name, user_id):
     conn.close()
     return family_id
 
+def join_family_by_code(code, user_id):
+    """Присоединить пользователя к семье по коду приглашения"""
+    try:
+        family_id = int(code)
+        conn = sqlite3.connect("babybot.db")
+        cur = conn.cursor()
+        
+        # Проверяем, существует ли семья
+        cur.execute("SELECT id, name FROM families WHERE id = ?", (family_id,))
+        family = cur.fetchone()
+        
+        if not family:
+            conn.close()
+            return None, "Семья не найдена"
+        
+        # Проверяем, не состоит ли пользователь уже в семье
+        cur.execute("SELECT family_id FROM family_members WHERE user_id = ?", (user_id,))
+        existing = cur.fetchone()
+        
+        if existing:
+            conn.close()
+            return None, "Вы уже состоите в семье"
+        
+        # Добавляем пользователя в семью
+        cur.execute("INSERT INTO family_members (family_id, user_id) VALUES (?, ?)", (family_id, user_id))
+        conn.commit()
+        conn.close()
+        
+        return family_id, family[1]  # family_id, family_name
+    except ValueError:
+        return None, "Неверный код приглашения"
+    except Exception as e:
+        return None, f"Ошибка: {str(e)}"
+
 def invite_code_for(family_id):
     # В существующей базе нет колонки invite_code, возвращаем ID семьи
     return str(family_id)
@@ -483,12 +517,6 @@ async def start(event):
             f"👤 **Ваша роль:** {role} {name}\n\n"
             f"💡 Я помогу следить за малышом и координировать уход в семье!"
         )
-        
-        buttons = [
-            [Button.text("🍽 Кормление"), Button.text("🧷 Смена подгузника")],
-            [Button.text("🍼 Статус кормления"), Button.text("📜 История")],
-            [Button.text("💡 Совет"), Button.text("⚙ Настройки")]
-        ]
     else:
         # Пользователь не в семье
         welcome_message = (
@@ -504,11 +532,13 @@ async def start(event):
             f"3️⃣ Начните записывать события\n\n"
             f"💡 Нажмите '⚙ Настройки' для создания семьи!"
         )
-        
-        buttons = [
-            [Button.text("⚙ Настройки"), Button.text("💡 Совет")],
-            [Button.text("ℹ️ Как это работает")]
-        ]
+    
+    # Всегда показываем полное меню
+    buttons = [
+        [Button.text("🍽 Кормление"), Button.text("🧷 Смена подгузника")],
+        [Button.text("🍼 Статус кормления"), Button.text("📜 История")],
+        [Button.text("💡 Совет"), Button.text("⚙ Настройки")]
+    ]
     
     await event.respond(welcome_message, buttons=buttons)
 
@@ -654,7 +684,17 @@ async def family_management_cmd(event):
             buttons=buttons
         )
     else:
-        await event.respond("❌ Ошибка: семья не найдена.")
+        # Пользователь не в семье - показываем опции
+        buttons = [
+            [Button.inline("👨‍👩‍👧 Создать семью", b"create_family")],
+            [Button.inline("🔗 Присоединиться к семье", b"join_family")],
+            [Button.inline("🔙 Назад к настройкам", b"back_to_settings")]
+        ]
+        await event.respond(
+            f"👨‍👩‍👧 **Управление семьей**\n\n"
+            f"У вас пока нет семьи. Выберите действие:",
+            buttons=buttons
+        )
 
 async def family_members_cmd(event):
     fid = get_family_id(event.sender_id)
@@ -1010,6 +1050,10 @@ async def callback_handler(event):
         await event.respond("👨‍👩‍👧 Введите название новой семьи:")
         family_creation_pending[event.sender_id] = True
     
+    elif data == "join_family":
+        await event.respond("🔗 Введите код приглашения семьи:")
+        join_pending[event.sender_id] = True
+    
     elif data == "family_management":
         await family_management_cmd(event)
     
@@ -1158,6 +1202,17 @@ async def handle_text(event):
         del family_creation_pending[uid]
         code = invite_code_for(fid)
         await event.respond(f"✅ Семья создана. Код приглашения: `{code}`")
+        return
+    
+    if uid in join_pending:
+        code = event.raw_text.strip()
+        family_id, family_name = join_family_by_code(code, uid)
+        del join_pending[uid]
+        
+        if family_id:
+            await event.respond(f"✅ Вы успешно присоединились к семье '{family_name}'!")
+        else:
+            await event.respond(f"❌ Не удалось присоединиться к семье: {family_name}")
         return
     
     if uid in edit_role_pending:
