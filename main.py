@@ -847,8 +847,12 @@ async def callback_handler(event):
             
             if feedings:
                 print(f"DEBUG: Первое кормление: {feedings[0]}")
+                print(f"DEBUG: Количество колонок в кормлении: {len(feedings[0])}")
+                print(f"DEBUG: Структура кормления: id={feedings[0][0]}, time={feedings[0][1]}, role={feedings[0][2] if len(feedings[0]) > 2 else 'N/A'}, name={feedings[0][3] if len(feedings[0]) > 3 else 'N/A'}")
             if diapers:
                 print(f"DEBUG: Первая смена: {diapers[0]}")
+                print(f"DEBUG: Количество колонок в смене: {len(diapers[0])}")
+                print(f"DEBUG: Структура смены: id={diapers[0][0]}, time={diapers[0][1]}, role={diapers[0][2] if len(diapers[0]) > 2 else 'N/A'}, name={diapers[0][3] if len(diapers[0]) > 3 else 'N/A'}")
         except Exception as e:
             print(f"DEBUG: Ошибка при обработке истории: {e}")
             await event.answer(f"❌ Ошибка: {str(e)}", alert=True)
@@ -860,9 +864,9 @@ async def callback_handler(event):
             text += "🍼 Кормления:\n"
             for f in feedings:
                 time_str = datetime.fromisoformat(f[1]).strftime("%H:%M")
-                # Проверяем, есть ли информация об авторе
-                if len(f) >= 4 and f[3] and f[4]:  # author_role и author_name
-                    author_info = f"{f[3]} {f[4]}"
+                # Проверяем, есть ли информация об авторе (индексы 2 и 3)
+                if len(f) >= 4 and f[2] and f[3]:  # author_role и author_name
+                    author_info = f"{f[2]} {f[3]}"
                 else:
                     author_info = "Неизвестно"
                 text += f"  • {time_str} - {author_info} [ID {f[0]}]\n"
@@ -873,9 +877,9 @@ async def callback_handler(event):
             text += "\n🧷 Подгузники:\n"
             for d in diapers:
                 time_str = datetime.fromisoformat(d[1]).strftime("%H:%M")
-                # Проверяем, есть ли информация об авторе
-                if len(d) >= 4 and d[3] and d[4]:  # author_role и author_name
-                    author_info = f"{d[3]} {d[4]}"
+                # Проверяем, есть ли информация об авторе (индексы 2 и 3)
+                if len(d) >= 4 and d[2] and d[3]:  # author_role и author_name
+                    author_info = f"{d[2]} {d[3]}"
                 else:
                     author_info = "Неизвестно"
                 text += f"  • {time_str} - {author_info} [ID {d[0]}]\n"
